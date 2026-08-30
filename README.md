@@ -27,6 +27,9 @@ grace timeout, `4` for an initialization failure, `5` for a launch/ownership
 failure, `6` when owned descendants survived the root, and `7` when cleanup
 could not be proved within its deadline.
 
+`cleanup: unverified` means termination was requested and the direct child was
+reaped, but the owned group remained observable until the cleanup deadline.
+
 ## Privacy and boundaries
 
 - No network access, background service, machine-wide process scan, or config edits.

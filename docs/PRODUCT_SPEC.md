@@ -22,7 +22,8 @@ On Unix, `cleanup: succeeded` proves that the group-directed termination signal
 was accepted and the direct child was reaped within the cleanup deadline. A
 killed descendant can remain briefly as a non-running zombie until its new
 parent reaps it; the tool does not scan the machine to inspect that unrelated
-parent. On Windows, success additionally requires Job Object active-process
+parent. That bounded uncertainty is reported as `cleanup: unverified`, never
+as success. On Windows, success additionally requires Job Object active-process
 accounting to reach zero.
 
 ## Non-goals

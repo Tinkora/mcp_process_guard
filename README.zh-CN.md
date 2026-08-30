@@ -24,6 +24,9 @@ mcp-process-guard --no-handshake --grace-ms 1000 --output json -- your-command
 启动或所有权边界失败为 `5`，根进程退出后仍有后代为 `6`，无法在期限内证明清理
 完成为 `7`。
 
+`cleanup: unverified` 表示已请求终止并回收直接子进程，但在清理期限结束时仍可观察到
+所属进程组。
+
 ## 隐私与边界
 
 - 不联网、不常驻、不扫描全机进程，也不修改配置。

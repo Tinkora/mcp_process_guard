@@ -55,6 +55,14 @@ pub enum Handshake {
 pub enum Cleanup {
     NotNeeded,
     Succeeded,
+    Unverified,
+    Failed,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum CleanupConfirmation {
+    Confirmed,
+    Unverified,
     Failed,
 }
 
@@ -180,13 +188,13 @@ fn cleanup_report(
     } = request;
     let terminated = group.terminate().is_ok();
     let waited = wait_bounded(child, timeout).ok().flatten();
-    let cleanup = if terminated
-        && (known_exit_code.is_some() || waited.is_some())
-        && group.confirm_cleanup(timeout).is_ok()
-    {
-        Cleanup::Succeeded
-    } else {
-        Cleanup::Failed
+    let cleanup = match (
+        terminated && (known_exit_code.is_some() || waited.is_some()),
+        group.confirm_cleanup(timeout),
+    ) {
+        (true, CleanupConfirmation::Confirmed) => Cleanup::Succeeded,
+        (true, CleanupConfirmation::Unverified) => Cleanup::Unverified,
+        _ => Cleanup::Failed,
     };
     let exit_code = known_exit_code.or_else(|| waited.and_then(|status| status.code()));
     GuardReport {
@@ -280,8 +288,14 @@ fn wait_bounded(child: &mut Child, timeout: Duration) -> std::io::Result<Option<
     }
 }
 
-fn confirm_cleanup_result(result: std::io::Result<()>) -> std::io::Result<()> {
-    result
+fn confirm_cleanup_result(result: std::io::Result<()>) -> CleanupConfirmation {
+    match result {
+        Ok(()) => CleanupConfirmation::Confirmed,
+        Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
+            CleanupConfirmation::Unverified
+        }
+        Err(_) => CleanupConfirmation::Failed,
+    }
 }
 
 fn base_command(options: &GuardOptions) -> Command {
@@ -364,7 +378,7 @@ impl OwnedGroup {
         Ok(())
     }
 
-    fn confirm_cleanup(&self, timeout: Duration) -> std::io::Result<()> {
+    fn confirm_cleanup(&self, timeout: Duration) -> CleanupConfirmation {
         confirm_cleanup_result(self.wait_gone(timeout))
     }
 }
@@ -513,8 +527,8 @@ mod windows_group {
             Ok(())
         }
 
-        pub(super) fn confirm_cleanup(&self, timeout: Duration) -> std::io::Result<()> {
-            self.wait_gone(timeout)
+        pub(super) fn confirm_cleanup(&self, timeout: Duration) -> CleanupConfirmation {
+            confirm_cleanup_result(self.wait_gone(timeout))
         }
     }
 
@@ -580,6 +594,9 @@ mod tests {
             "owned process group did not terminate",
         );
 
-        assert!(confirm_cleanup_result(Err(timeout)).is_err());
+        assert_eq!(
+            confirm_cleanup_result(Err(timeout)),
+            CleanupConfirmation::Unverified
+        );
     }
 }
