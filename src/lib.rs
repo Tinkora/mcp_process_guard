@@ -280,6 +280,10 @@ fn wait_bounded(child: &mut Child, timeout: Duration) -> std::io::Result<Option<
     }
 }
 
+fn confirm_cleanup_result(result: std::io::Result<()>) -> std::io::Result<()> {
+    result
+}
+
 fn base_command(options: &GuardOptions) -> Command {
     let mut command = Command::new(&options.command);
     command
@@ -361,14 +365,7 @@ impl OwnedGroup {
     }
 
     fn confirm_cleanup(&self, timeout: Duration) -> std::io::Result<()> {
-        match self.wait_gone(timeout) {
-            Ok(()) => Ok(()),
-            // A killed Unix descendant can remain as a non-running zombie until its new
-            // parent reaps it. Signal delivery plus reaping our direct child is the
-            // strongest portable proof available without scanning unrelated processes.
-            Err(error) if error.kind() == std::io::ErrorKind::TimedOut => Ok(()),
-            Err(error) => Err(error),
-        }
+        confirm_cleanup_result(self.wait_gone(timeout))
     }
 }
 
@@ -573,5 +570,16 @@ mod tests {
             validate_initialize_response(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{}}\n"),
             Handshake::Failed
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn cleanup_timeout_is_not_reported_as_success() {
+        let timeout = std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "owned process group did not terminate",
+        );
+
+        assert!(confirm_cleanup_result(Err(timeout)).is_err());
     }
 }
