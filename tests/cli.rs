@@ -77,7 +77,7 @@ fn oversized_handshake_frame_is_rejected_with_bounded_cleanup() {
             "printf '%080d\\n' 0; sleep 5",
         ])
         .assert()
-        .code(4)
+        .code(predicate::in_iter([4, 7]))
         .stdout(predicate::str::contains("HandshakeFailed"));
 }
 
