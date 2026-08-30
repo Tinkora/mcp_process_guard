@@ -2,12 +2,32 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
-use mcp_process_guard::{GuardError, GuardOptions, Outcome, run};
+use mcp_process_guard::{Cleanup, GuardError, GuardOptions, GuardReport, Outcome, run};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Output {
     Human,
     Json,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mcp_process_guard::{Cleanup, GuardReport, Handshake};
+
+    #[test]
+    fn unverified_cleanup_uses_cleanup_failure_exit_code() {
+        let report = GuardReport {
+            outcome: Outcome::DescendantsSurvived,
+            handshake: Handshake::Skipped,
+            elapsed_ms: 1,
+            exit_code: Some(0),
+            descendants_detected: true,
+            cleanup: Cleanup::Unverified,
+        };
+
+        assert_eq!(exit_code_for_report(&report), ExitCode::from(7));
+    }
 }
 
 #[derive(Debug, Parser)]
@@ -56,6 +76,20 @@ fn parse_frame_size(value: &str) -> Result<usize, String> {
     parse_bounded(value, 1_048_576, "handshake frame size").map(|parsed| parsed as usize)
 }
 
+fn exit_code_for_report(report: &GuardReport) -> ExitCode {
+    if matches!(report.cleanup, Cleanup::Unverified | Cleanup::Failed) {
+        return ExitCode::from(7);
+    }
+    match report.outcome {
+        Outcome::Exited if report.exit_code == Some(0) => ExitCode::SUCCESS,
+        Outcome::Exited => ExitCode::from(1),
+        Outcome::TimedOut => ExitCode::from(3),
+        Outcome::HandshakeFailed => ExitCode::from(4),
+        Outcome::DescendantsSurvived => ExitCode::from(6),
+        Outcome::CleanupFailed => ExitCode::from(7),
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let (command, args) = cli.command.split_first().expect("clap requires a command");
@@ -87,14 +121,7 @@ fn main() -> ExitCode {
                     report.cleanup,
                 ),
             }
-            match report.outcome {
-                Outcome::Exited if report.exit_code == Some(0) => ExitCode::SUCCESS,
-                Outcome::Exited => ExitCode::from(1),
-                Outcome::TimedOut => ExitCode::from(3),
-                Outcome::HandshakeFailed => ExitCode::from(4),
-                Outcome::DescendantsSurvived => ExitCode::from(6),
-                Outcome::CleanupFailed => ExitCode::from(7),
-            }
+            exit_code_for_report(&report)
         }
         Err(error) => {
             match cli.output {

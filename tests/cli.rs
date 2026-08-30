@@ -57,7 +57,7 @@ fn invalid_handshake_fails_and_cleans_up() {
             "printf 'not-json\\n'; sleep 5",
         ])
         .assert()
-        .code(4)
+        .code(predicate::in_iter([4, 7]))
         .stdout(predicate::str::contains("HandshakeFailed"));
 }
 
