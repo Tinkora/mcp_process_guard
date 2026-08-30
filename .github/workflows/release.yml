@@ -31,7 +31,7 @@ jobs:
           grep -Fq "## [${version}]" CHANGELOG.md
           test "$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")" = "${GITHUB_SHA}"
           git fetch --no-tags origin main
-          git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "${GITHUB_SHA}"
           for attempt in {1..40}; do
             conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&branch=main&event=push&per_page=10" --jq '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA)][0].conclusion // "pending"')"
             test "$conclusion" = success && break
